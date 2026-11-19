@@ -169,7 +169,9 @@ st.markdown("""
     }
 
     /* Primary Predict Button */
-    div.stButton > button:first-child[kind="primary"] {
+    div.stButton > button[kind="primary"],
+    div.stButton > button[data-testid="baseButton-primary"],
+    button[data-testid="baseButton-primary"] {
         background: linear-gradient(135deg, #E91E63 0%, #8E24AA 100%) !important;
         color: white !important;
         border: none !important;
@@ -180,21 +182,27 @@ st.markdown("""
         box-shadow: 0 4px 15px rgba(233, 30, 99, 0.3) !important;
         transition: all 0.25s ease !important;
     }
-    div.stButton > button:first-child[kind="primary"]:hover {
+    div.stButton > button[kind="primary"]:hover,
+    div.stButton > button[data-testid="baseButton-primary"]:hover,
+    button[data-testid="baseButton-primary"]:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(233, 30, 99, 0.45) !important;
     }
 
     /* Secondary Sample Loader Buttons */
-    div.stButton > button:first-child[kind="secondary"] {
+    div.stButton > button[kind="secondary"],
+    div.stButton > button[data-testid="baseButton-secondary"],
+    button[data-testid="baseButton-secondary"] {
         background-color: #FFFFFF !important;
         color: #5E35B1 !important;
-        border: 1px solid #D1C4E9 !important;
+        border: 1.5px solid #D1C4E9 !important;
         border-radius: 20px !important;
         font-weight: 600 !important;
         transition: all 0.2s ease !important;
     }
-    div.stButton > button:first-child[kind="secondary"]:hover {
+    div.stButton > button[kind="secondary"]:hover,
+    div.stButton > button[data-testid="baseButton-secondary"]:hover,
+    button[data-testid="baseButton-secondary"]:hover {
         background-color: #F3E5F5 !important;
         border-color: #BA68C8 !important;
         color: #4A148C !important;
@@ -747,9 +755,12 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
             st.session_state["active_sample_label"] = label
             for col in feature_names:
                 st.session_state[f"f_{col}"] = float(sample_dict.get(col, benign_medians.get(col, 0.0)))
+            st.session_state["has_run_prediction"] = True
 
-        if "f_radius_mean" not in st.session_state:
-            set_preset_features(benign_medians, "Benign Population Baseline (Medians)")
+        # Initialize session state for all 30 features
+        for col in feature_names:
+            if f"f_{col}" not in st.session_state:
+                st.session_state[f"f_{col}"] = float(benign_medians[col])
 
         # ----------------------------------------------------------------------
         # ONE-CLICK SAMPLE LOADERS (PINK & LAVENDER THEMED BUTTONS)
@@ -760,19 +771,19 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
 
         b_c1, b_c2, b_c3, b_c4 = st.columns(4)
         with b_c1:
-            if st.button("🌹 Load Malignant (Row 0)", kind="secondary"):
+            if st.button("🌹 Load Malignant (Row 0)", type="secondary", use_container_width=True):
                 set_preset_features(sample_malignant_row0, "Row 0: Confirmed Malignant")
                 st.rerun()
         with b_c2:
-            if st.button("🌸 Load Benign (Row 19)", kind="secondary"):
+            if st.button("🌸 Load Benign (Row 19)", type="secondary", use_container_width=True):
                 set_preset_features(sample_benign_row19, "Row 19: Confirmed Benign")
                 st.rerun()
         with b_c3:
-            if st.button("🌸 Load Benign (Row 20)", kind="secondary"):
+            if st.button("🌸 Load Benign (Row 20)", type="secondary", use_container_width=True):
                 set_preset_features(sample_benign_row20, "Row 20: Confirmed Benign")
                 st.rerun()
         with b_c4:
-            if st.button("🔄 Reset (Benign Medians)", kind="secondary"):
+            if st.button("🔄 Reset (Benign Medians)", type="secondary", use_container_width=True):
                 set_preset_features(benign_medians, "Benign Population Baseline (Medians)")
                 st.rerun()
 
@@ -823,7 +834,6 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
                 with (c_m1 if i % 2 == 0 else c_m2):
                     user_input_dict[col] = st.number_input(
                         f"{col}",
-                        value=float(st.session_state.get(f"f_{col}", benign_medians[col])),
                         format="%.5f",
                         key=f"f_{col}"
                     )
@@ -836,7 +846,6 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
                 with (c_s1 if i % 2 == 0 else c_s2):
                     user_input_dict[col] = st.number_input(
                         f"{col}",
-                        value=float(st.session_state.get(f"f_{col}", benign_medians[col])),
                         format="%.5f",
                         key=f"f_{col}"
                     )
@@ -849,7 +858,6 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
                 with (c_w1 if i % 2 == 0 else c_w2):
                     user_input_dict[col] = st.number_input(
                         f"{col}",
-                        value=float(st.session_state.get(f"f_{col}", benign_medians[col])),
                         format="%.5f",
                         key=f"f_{col}"
                     )
@@ -861,41 +869,70 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
         predict_clicked = st.button("🔮 Run Diagnostic Prediction", type="primary", use_container_width=True)
 
         if predict_clicked:
+            st.session_state["has_run_prediction"] = True
+
+        # Run diagnosis when requested or automatically on sample load
+        if st.session_state.get("has_run_prediction", True):
             input_df = pd.DataFrame([user_input_dict])[feature_names]
             input_scaled = scaler.transform(input_df)
 
             st.markdown("---")
             st.subheader("Diagnostic Classification Results")
 
-            # Single Model vs Multi-Model
+            # Collect predictions and probabilities for all models
+            all_model_preds = {}
+            all_model_probs = {}
+            all_model_dscores = {}
+
+            for m_name, clf in all_models.items():
+                cur_in = input_df if m_name == "Gaussian Naive Bayes" else input_scaled
+                p = clf.predict(cur_in)[0]
+                all_model_preds[m_name] = p
+
+                if hasattr(clf, "predict_proba"):
+                    probs = clf.predict_proba(cur_in)[0]
+                    m_idx = list(clf.classes_).index("M") if hasattr(clf, "classes_") else 1
+                    all_model_probs[m_name] = float(probs[m_idx])
+                elif hasattr(clf, "decision_function"):
+                    dfunc = float(clf.decision_function(cur_in)[0])
+                    all_model_dscores[m_name] = dfunc
+                    all_model_probs[m_name] = float(1.0 / (1.0 + np.exp(-dfunc)))
+
+            if "Support Vector Machine" in all_models and hasattr(all_models["Support Vector Machine"], "decision_function"):
+                all_model_dscores["Support Vector Machine"] = float(all_models["Support Vector Machine"].decision_function(input_scaled)[0])
+
+            # Determine primary prediction and display
             if selected_model_option == "🤝 Multi-Model Consensus (All 3 Models)":
                 st.markdown("#### 🤝 Multi-Model Consensus Breakdown")
                 mc1, mc2, mc3 = st.columns(3)
-                consensus_preds = {}
+                cols_list = [mc1, mc2, mc3]
 
-                for idx, (m_name, clf) in enumerate(all_models.items()):
-                    # GaussianNB runs unscaled, others scaled
-                    cur_in = input_df if m_name == "Gaussian Naive Bayes" else input_scaled
-                    pred = clf.predict(cur_in)[0]
-                    consensus_preds[m_name] = pred
-
-                    col_target = [mc1, mc2, mc3][idx]
-                    with col_target:
-                        card_class = "malignant-alert" if pred == "M" else "benign-alert"
-                        badge_text = "🚨 Malignant" if pred == "M" else "✅ Benign"
+                for idx, (m_name, pred) in enumerate(all_model_preds.items()):
+                    with cols_list[idx]:
                         badge_color = "#E91E63" if pred == "M" else "#7E57C2"
+                        badge_text = "🚨 Malignant" if pred == "M" else "✅ Benign"
+                        prob_m = all_model_probs[m_name]
+                        prob_pct = (prob_m if pred == "M" else (1.0 - prob_m)) * 100.0
                         st.markdown(f"""
-                        <div style="background: white; border: 2px solid {badge_color}; border-radius: 10px; padding: 14px; text-align: center;">
-                            <div style="font-size: 0.82rem; font-weight: 700; color: #666;">{m_name}</div>
-                            <div style="font-size: 1.4rem; font-weight: 800; color: {badge_color}; margin: 8px 0;">{badge_text}</div>
+                        <div style="background: white; border: 2px solid {badge_color}; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                            <div style="font-size: 0.85rem; font-weight: 700; color: #555;">{m_name}</div>
+                            <div style="font-size: 1.5rem; font-weight: 800; color: {badge_color}; margin: 8px 0;">{badge_text}</div>
+                            <div style="font-size: 0.88rem; color: #666; font-weight: 600;">Confidence: {prob_pct:.1f}%</div>
                         </div>
                         """, unsafe_allow_html=True)
 
-                primary_pred = consensus_preds.get(primary_model_name, list(consensus_preds.values())[0])
+                m_count = sum(1 for p in all_model_preds.values() if p == "M")
+                b_count = sum(1 for p in all_model_preds.values() if p == "B")
+                primary_pred = "M" if m_count >= 2 else "B"
+                active_prob_m = float(np.mean(list(all_model_probs.values())))
+
+                if m_count == 3 or b_count == 3:
+                    st.success(f"✨ **Unanimous Consensus (3/3 Models Agree):** All models converged on **{'Malignant' if primary_pred == 'M' else 'Benign'}**.")
+                else:
+                    st.info(f"⚖️ **Majority Consensus (2/3 Models):** Decision determined by majority vote (**{'Malignant' if primary_pred == 'M' else 'Benign'}**).")
             else:
-                chosen_clf = all_models[selected_model_option]
-                cur_in = input_df if selected_model_option == "Gaussian Naive Bayes" else input_scaled
-                primary_pred = chosen_clf.predict(cur_in)[0]
+                primary_pred = all_model_preds[selected_model_option]
+                active_prob_m = all_model_probs.get(selected_model_option, 0.5)
 
             # Primary Diagnosis Card
             if primary_pred == "M":
@@ -904,7 +941,7 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
                     <h3 style="margin-top: 0; color: #880E4F;">🚨 Clinical Prediction: MALIGNANT (Cancerous Tumor)</h3>
                     <p style="margin-bottom: 0; line-height: 1.6;">
                         The model detected distinct morphological abnormalities in nuclear dimensions
-                        (elevated cell radius, perimeter, and concavity) that strongly correspond to malignant breast pathology.
+                        (elevated cell radius, perimeter, area, and concavity) that strongly correspond to malignant breast pathology.
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -919,51 +956,103 @@ elif menu_choice == "🔮 Real-Time Cancer Prediction":
                 </div>
                 """, unsafe_allow_html=True)
 
-            # Mathematical Boundary Distance & Risk Gauge
-            if hasattr(primary_model, "decision_function"):
-                d_score = float(primary_model.decision_function(input_scaled)[0])
+            # Mathematical Boundary Distance & Confidence Analysis
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("#### 📐 Mathematical Decision Boundary & Confidence Analysis")
 
-                # Convert decision score to an intuitive confidence gauge (0 to 100%)
-                # Sigmoid approximation: 1 / (1 + e^-score)
-                malignant_prob = 1.0 / (1.0 + np.exp(-d_score))
-                benign_prob = 1.0 - malignant_prob
+            g_col1, g_col2 = st.columns([1.5, 1])
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("#### 📐 Mathematical Decision Boundary Analysis")
+            with g_col1:
+                st.progress(float(active_prob_m))
+                st.caption(f"Estimated Malignant Probability: **{active_prob_m*100:.1f}%** | Benign Probability: **{(1.0 - active_prob_m)*100:.1f}%**")
 
-                g_col1, g_col2 = st.columns([1.5, 1])
-                with g_col1:
-                    st.write(f"**SVM Hyperplane Distance Score:** `{d_score:+.4f}`")
+                if selected_model_option == "Gaussian Naive Bayes":
+                    st.write("**Posterior Probability Formula:** `P(Diagnosis = M | X)`")
+                    st.caption("Gaussian Naive Bayes computes posterior likelihood using Bayes' rule with continuous Gaussian density functions.")
+                elif selected_model_option == "Logistic Regression":
+                    d_score = all_model_dscores.get("Logistic Regression", 0.0)
+                    st.write(f"**Logistic Regression Log-Odds (z):** `{d_score:+.4f}`")
+                    st.caption("Mapped through standard logistic sigmoid: `p = 1 / (1 + e^-z)`.")
+                elif selected_model_option == "Support Vector Machine":
+                    d_score = all_model_dscores.get("Support Vector Machine", 0.0)
+                    st.write(f"**SVM Hyperplane Margin Distance Score:** `{d_score:+.4f}`")
                     st.caption("Negative score (< 0) indicates Benign margin space; Positive score (> 0) indicates Malignant margin space.")
-                    st.progress(float(malignant_prob))
-                    st.caption(f"Estimated Malignant Probability: **{malignant_prob*100:.1f}%** | Benign Probability: **{benign_prob*100:.1f}%**")
+                else:
+                    st.write("**Ensemble Consensus:** Average Malignant Risk Across All 3 Classifiers")
+                    st.caption("Combines Gaussian Naive Bayes, Logistic Regression, and Support Vector Machine.")
 
-                with g_col2:
-                    st.markdown("""
-                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; font-size: 0.85rem; color: #555;">
-                        <b>Viva Note:</b> The Support Vector Machine computes the signed geometric distance from the separating hyperplane:
-                        <code>f(x) = w · x + b</code>.
-                    </div>
-                    """, unsafe_allow_html=True)
+            with g_col2:
+                if selected_model_option == "Gaussian Naive Bayes":
+                    viva_text = "<b>Viva Note:</b> Gaussian Naive Bayes assumes independent features conditional on class: <code>P(X|y) = ∏ P(x_i|y)</code>, where each continuous feature follows a normal distribution."
+                elif selected_model_option == "Logistic Regression":
+                    viva_text = "<b>Viva Note:</b> Logistic Regression defines a linear boundary <code>z = w · x + b</code>. The sign and magnitude of <code>z</code> reflect log-odds of malignancy."
+                elif selected_model_option == "Support Vector Machine":
+                    viva_text = "<b>Viva Note:</b> Support Vector Machine computes the signed geometric distance from the separating hyperplane: <code>f(x) = w · x + b</code> with maximum margin."
+                else:
+                    viva_text = "<b>Viva Note:</b> Multi-model consensus aggregates generative (Naive Bayes), discriminative probabilistic (Logistic Regression), and margin-based (SVM) paradigms."
+
+                st.markdown(f"""
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px; font-size: 0.85rem; color: #555; line-height: 1.5;">
+                    {viva_text}
+                </div>
+                """, unsafe_allow_html=True)
 
             # Interactive Patient Comparison vs Population Averages
             st.markdown("#### 🔍 Patient Measurement Comparison vs Clinical Dataset")
-            comp_features = ["radius_mean", "texture_mean", "perimeter_mean", "area_mean"]
+            comp_features = ["radius_mean", "texture_mean", "perimeter_mean", "area_mean", "concavity_mean", "concave points_mean"]
             if df_raw is not None:
                 b_means = df_raw[df_raw["diagnosis"] == "B"][comp_features].mean()
                 m_means = df_raw[df_raw["diagnosis"] == "M"][comp_features].mean()
 
                 comp_data = []
                 for f in comp_features:
-                    patient_val = user_input_dict[f]
+                    patient_val = float(user_input_dict[f])
+                    b_val = float(b_means[f])
+                    m_val = float(m_means[f])
+                    dist_to_b = abs(patient_val - b_val)
+                    dist_to_m = abs(patient_val - m_val)
+                    closest = "Benign Range 🌸" if dist_to_b < dist_to_m else "Malignant Range 🌹"
+                    status = "Above Benign Avg" if patient_val > b_val else "Within Benign Avg"
+
                     comp_data.append({
                         "Feature": f,
-                        "Patient Value": f"{patient_val:.2f}",
-                        "Benign Population Mean": f"{b_means[f]:.2f}",
-                        "Malignant Population Mean": f"{m_means[f]:.2f}",
-                        "Status": "Above Benign Avg" if patient_val > b_means[f] else "Within Benign Avg"
+                        "Patient Value": f"{patient_val:.4f}",
+                        "Benign Pop Mean": f"{b_val:.4f}",
+                        "Malignant Pop Mean": f"{m_val:.4f}",
+                        "Relative to Benign": status,
+                        "Closest Profile": closest
                     })
+
                 st.dataframe(pd.DataFrame(comp_data), use_container_width=True)
+
+                # Interactive Relative Comparison Chart
+                st.markdown("##### 📊 Relative Feature Levels Normalized to Benign Baseline")
+                fig_comp, ax_comp = plt.subplots(figsize=(9, 3.8))
+                x_indices = np.arange(len(comp_features))
+                bar_width = 0.25
+
+                p_vals = [float(user_input_dict[f]) for f in comp_features]
+                b_vals = [float(b_means[f]) for f in comp_features]
+                m_vals = [float(m_means[f]) for f in comp_features]
+
+                p_norm = [p / (b if b != 0 else 1.0) for p, b in zip(p_vals, b_vals)]
+                b_norm = [1.0] * len(comp_features)
+                m_norm = [m / (b if b != 0 else 1.0) for m, b in zip(m_vals, b_vals)]
+
+                ax_comp.bar(x_indices - bar_width, b_norm, bar_width, label="Benign Baseline (1.0x)", color="#7E57C2", alpha=0.85)
+                ax_comp.bar(x_indices, p_norm, bar_width, label="Current Patient Sample", color="#E91E63" if primary_pred == "M" else "#AB47BC")
+                ax_comp.bar(x_indices + bar_width, m_norm, bar_width, label="Malignant Population Avg", color="#D81B60", alpha=0.85)
+
+                ax_comp.set_xticks(x_indices)
+                ax_comp.set_xticklabels([f.replace("_mean", "") for f in comp_features], fontweight="600")
+                ax_comp.set_ylabel("Ratio to Benign Mean", fontweight="600")
+                ax_comp.set_title("Patient Measurements Relative to Benign Clinical Baseline (1.0 = Normal Benign)", fontsize=11, fontweight="bold", color="#880E4F")
+                ax_comp.axhline(1.0, color="#888", linestyle="--", linewidth=0.8)
+                ax_comp.legend(loc="upper right", framealpha=0.9)
+                ax_comp.grid(True, linestyle=":", alpha=0.5)
+                plt.tight_layout()
+                st.pyplot(fig_comp)
+                plt.close(fig_comp)
 
             st.markdown("""
             <div class="disclaimer-badge">
