@@ -382,6 +382,7 @@ if should_print(7):
     save_data = {
         "model": best_model_instance,
         "model_name": best_model_name,
+        "all_models": {name: config["model"] for name, config in models.items()},
         "scaler": scaler,
         "feature_names": feature_names,
         "comparison_table": comparison_df
