@@ -218,7 +218,7 @@ AWARENESS_PALETTE = {"B": "#7e57c2", "M": "#d81b60"}
 @st.cache_data
 def load_dataset():
     """Loads the Wisconsin breast cancer dataset from data/data.csv."""
-    path = os.path.join("data", "datjoin(os.getcwd(), "data", "data.csv")a.csv")
+    path = os.path.join("data", "datjoin(os.getcwd(),"data.csv")a.csv")
     if not os.path.exists(path):
         path = os.path.join("..", "data", "data.csv")
     if not os.path.exists(path):
