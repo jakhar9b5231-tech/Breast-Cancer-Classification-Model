@@ -26,6 +26,9 @@ def load_dataset():
     """Loads the dataset from data/data.csv."""
     path = os.path.join("data", "data.csv")
     if not os.path.exists(path):
+        # Fallback if executed from subfolder
+        path = os.path.join("..", "data", "data.csv")
+    if not os.path.exists(path):
         st.error(f"Dataset file '{path}' not found.")
         return None
     return pd.read_csv(path)
@@ -35,6 +38,9 @@ def load_dataset():
 def load_trained_model():
     """Loads the trained model artifacts saved by train_model.py."""
     path = "model.joblib"
+    if not os.path.exists(path):
+        # Fallback if executed from subfolder
+        path = os.path.join("..", "model.joblib")
     if not os.path.exists(path):
         return None
     return joblib.load(path)
@@ -252,7 +258,7 @@ elif menu_choice == "4. Model Comparison & Evaluation":
 # ------------------------------------------------------------------------------
 elif menu_choice == "5. Cancer Prediction":
     st.title("Cancer Diagnosis Prediction")
-    st.write("Enter the 30 cell nucleus measurements or load sample cases to test the trained model.")
+    st.write("Enter the 30 cell nucleus measurements or load real patient samples to test the trained model.")
 
     artifacts = load_trained_model()
     if artifacts is None:
@@ -265,8 +271,11 @@ elif menu_choice == "5. Cancer Prediction":
 
         st.info(f"Loaded Trained Model: **{model_name}**")
 
-        # Preset test samples taken directly from data/data.csv
-        sample_malignant = {
+        # ----------------------------------------------------------------------
+        # PRESET SAMPLES FROM ACTUAL DATASET
+        # ----------------------------------------------------------------------
+        # Sample 1: Row 0 (Confirmed Malignant in data/data.csv)
+        sample_malignant_row0 = {
             'radius_mean': 17.99, 'texture_mean': 10.38, 'perimeter_mean': 122.8,
             'area_mean': 1001.0, 'smoothness_mean': 0.1184, 'compactness_mean': 0.2776,
             'concavity_mean': 0.3001, 'concave points_mean': 0.1471, 'symmetry_mean': 0.2419,
@@ -280,7 +289,8 @@ elif menu_choice == "5. Cancer Prediction":
             'fractal_dimension_worst': 0.1189
         }
 
-        sample_benign = {
+        # Sample 2: Row 19 (Confirmed Benign in data/data.csv)
+        sample_benign_row19 = {
             'radius_mean': 13.54, 'texture_mean': 14.36, 'perimeter_mean': 87.46,
             'area_mean': 566.3, 'smoothness_mean': 0.09779, 'compactness_mean': 0.08129,
             'concavity_mean': 0.06664, 'concave points_mean': 0.04781, 'symmetry_mean': 0.1885,
@@ -294,68 +304,136 @@ elif menu_choice == "5. Cancer Prediction":
             'fractal_dimension_worst': 0.07259
         }
 
-        preset = st.selectbox(
-            "Load Sample Values for Quick Viva Demonstration:",
-            ["Custom Input", "Sample 1: Malignant Case (Actual Dataset Row 0)", "Sample 2: Benign Case (Actual Dataset Row 19)"]
-        )
+        # Sample 3: Row 20 (Confirmed Benign in data/data.csv)
+        sample_benign_row20 = {
+            'radius_mean': 13.08, 'texture_mean': 15.71, 'perimeter_mean': 85.63,
+            'area_mean': 520.0, 'smoothness_mean': 0.1075, 'compactness_mean': 0.1270,
+            'concavity_mean': 0.04568, 'concave points_mean': 0.0311, 'symmetry_mean': 0.1967,
+            'fractal_dimension_mean': 0.06811, 'radius_se': 0.1852, 'texture_se': 0.7477,
+            'perimeter_se': 1.383, 'area_se': 14.67, 'smoothness_se': 0.004097,
+            'compactness_se': 0.01898, 'concavity_se': 0.01698, 'concave points_se': 0.00649,
+            'symmetry_se': 0.01678, 'fractal_dimension_se': 0.002425, 'radius_worst': 14.50,
+            'texture_worst': 20.49, 'perimeter_worst': 96.09, 'area_worst': 630.5,
+            'smoothness_worst': 0.1312, 'compactness_worst': 0.2776, 'concavity_worst': 0.1890,
+            'concave points_worst': 0.07283, 'symmetry_worst': 0.3184,
+            'fractal_dimension_worst': 0.08183
+        }
 
-        current_values = {}
-        if preset == "Sample 1: Malignant Case (Actual Dataset Row 0)":
-            current_values = sample_malignant
-        elif preset == "Sample 2: Benign Case (Actual Dataset Row 19)":
-            current_values = sample_benign
+        # Realistic Benign Baseline (Exact Medians of all 357 Benign tumors in data.csv)
+        benign_medians = {
+            'radius_mean': 12.20, 'texture_mean': 17.39, 'perimeter_mean': 78.18,
+            'area_mean': 458.4, 'smoothness_mean': 0.09076, 'compactness_mean': 0.07529,
+            'concavity_mean': 0.03709, 'concave points_mean': 0.02344, 'symmetry_mean': 0.1714,
+            'fractal_dimension_mean': 0.06154, 'radius_se': 0.2575, 'texture_se': 1.1080,
+            'perimeter_se': 1.851, 'area_se': 19.63, 'smoothness_se': 0.00653,
+            'compactness_se': 0.01631, 'concavity_se': 0.01840, 'concave points_se': 0.00906,
+            'symmetry_se': 0.01909, 'fractal_dimension_se': 0.00281, 'radius_worst': 13.35,
+            'texture_worst': 22.82, 'perimeter_worst': 86.92, 'area_worst': 547.4,
+            'smoothness_worst': 0.1254, 'compactness_worst': 0.1698, 'concavity_worst': 0.1412,
+            'concave points_worst': 0.07431, 'symmetry_worst': 0.2687,
+            'fractal_dimension_worst': 0.07712
+        }
 
-        st.subheader("Input Tumor Features")
+        # Helper function to reliably update session state input values
+        def populate_inputs(sample_dict, sample_name="Custom"):
+            st.session_state["loaded_sample_name"] = sample_name
+            for col in feature_names:
+                st.session_state[f"field_{col}"] = float(sample_dict.get(col, benign_medians.get(col, 0.0)))
 
-        # Organize 30 features into 3 tabs
-        tab1, tab2, tab3 = st.tabs(["Mean Features", "Standard Error (SE) Features", "Worst (Largest) Features"])
+        # Initialize session state with benign medians on first visit
+        if "field_radius_mean" not in st.session_state:
+            populate_inputs(benign_medians, "Benign Baseline Medians")
+
+        # ----------------------------------------------------------------------
+        # QUICK VIVA DEMONSTRATION BUTTONS
+        # ----------------------------------------------------------------------
+        st.subheader("1. Quick Sample Loaders (Recommended for Viva Demo)")
+        st.write("Click any button to instantly load confirmed patient data from `data/data.csv`:")
+
+        btn_col1, btn_col2, btn_col3, btn_col4 = st.columns(4)
+
+        with btn_col1:
+            if st.button("🚨 Load Sample 1 (Malignant Row 0)"):
+                populate_inputs(sample_malignant_row0, "Row 0: Malignant Case")
+                st.rerun()
+
+        with btn_col2:
+            if st.button("✅ Load Sample 2 (Benign Row 19)"):
+                populate_inputs(sample_benign_row19, "Row 19: Benign Case")
+                st.rerun()
+
+        with btn_col3:
+            if st.button("✅ Load Sample 3 (Benign Row 20)"):
+                populate_inputs(sample_benign_row20, "Row 20: Benign Case")
+                st.rerun()
+
+        with btn_col4:
+            if st.button("🔄 Reset (Benign Medians)"):
+                populate_inputs(benign_medians, "Benign Baseline Medians")
+                st.rerun()
+
+        active_loaded = st.session_state.get("loaded_sample_name", "Benign Baseline Medians")
+        if "Malignant" in active_loaded:
+            st.markdown(f"**Currently Loaded Sample:** :red[{active_loaded}] — *(Expected Ground Truth: Malignant / Cancerous)*")
+        else:
+            st.markdown(f"**Currently Loaded Sample:** :green[{active_loaded}] — *(Expected Ground Truth: Benign / Non-Cancerous)*")
+
+        # ----------------------------------------------------------------------
+        # FEATURE INPUT FIELDS (ORGANIZED IN 3 TABS)
+        # ----------------------------------------------------------------------
+        st.subheader("2. Review or Edit 30 Cell Nucleus Features")
+
+        tab1, tab2, tab3 = st.tabs(["Mean Features (10)", "Standard Error (SE) Features (10)", "Worst Features (10)"])
 
         user_inputs = {}
 
         with tab1:
-            st.write("Average cell nucleus measurements:")
+            st.caption("Mean physical measurements of cell nuclei:")
             mean_cols = [c for c in feature_names if "_mean" in c]
             cols = st.columns(2)
             for i, col in enumerate(mean_cols):
-                default_val = float(current_values.get(col, 15.0 if "area" in col or "perimeter" in col else 1.0))
                 with cols[i % 2]:
                     user_inputs[col] = st.number_input(
                         f"{col}",
-                        value=default_val,
+                        value=float(st.session_state.get(f"field_{col}", benign_medians[col])),
                         format="%.5f",
-                        key=f"input_{col}"
+                        key=f"field_{col}"
                     )
 
         with tab2:
-            st.write("Standard error cell nucleus measurements:")
+            st.caption("Standard error of physical measurements:")
             se_cols = [c for c in feature_names if "_se" in c]
             cols = st.columns(2)
             for i, col in enumerate(se_cols):
-                default_val = float(current_values.get(col, 0.5 if "area" in col or "perimeter" in col else 0.05))
                 with cols[i % 2]:
                     user_inputs[col] = st.number_input(
                         f"{col}",
-                        value=default_val,
+                        value=float(st.session_state.get(f"field_{col}", benign_medians[col])),
                         format="%.5f",
-                        key=f"input_{col}"
+                        key=f"field_{col}"
                     )
 
         with tab3:
-            st.write("Largest/worst cell nucleus measurements:")
+            st.caption("Worst (largest) physical measurements:")
             worst_cols = [c for c in feature_names if "_worst" in c]
             cols = st.columns(2)
             for i, col in enumerate(worst_cols):
-                default_val = float(current_values.get(col, 20.0 if "area" in col or "perimeter" in col else 1.5))
                 with cols[i % 2]:
                     user_inputs[col] = st.number_input(
                         f"{col}",
-                        value=default_val,
+                        value=float(st.session_state.get(f"field_{col}", benign_medians[col])),
                         format="%.5f",
-                        key=f"input_{col}"
+                        key=f"field_{col}"
                     )
 
+        # ----------------------------------------------------------------------
+        # PREDICTION EXECUTION & RESULTS
+        # ----------------------------------------------------------------------
         st.markdown("---")
-        if st.button("Predict Tumor Diagnosis"):
+        st.subheader("3. Run Prediction")
+
+        if st.button("🔮 Predict Tumor Diagnosis", type="primary"):
+            # Arrange input features in exact column order expected by trained model
             input_df = pd.DataFrame([user_inputs])[feature_names]
 
             # Scale if model is Logistic Regression or Support Vector Machine
@@ -364,16 +442,37 @@ elif menu_choice == "5. Cancer Prediction":
             else:
                 input_scaled = input_df
 
+            # Predict class and decision score
             prediction = model.predict(input_scaled)[0]
 
+            decision_score = None
+            if hasattr(model, "decision_function"):
+                decision_score = float(model.decision_function(input_scaled)[0])
+
             st.subheader("Prediction Result:")
+
             if prediction == "M":
-                st.error("🚨 **Prediction: Malignant (Cancerous)**\n\nThe features correspond to a malignant breast tumor.")
+                st.error(
+                    "🚨 **Prediction: Malignant (Cancerous)**\n\n"
+                    "The cell nucleus measurements exhibit patterns characteristic of a malignant breast tumor "
+                    "(e.g., significantly enlarged radius, perimeter, and elevated concavity)."
+                )
             else:
-                st.success("✅ **Prediction: Benign (Non-Cancerous)**\n\nThe features correspond to a benign breast mass.")
+                st.success(
+                    "✅ **Prediction: Benign (Non-Cancerous)**\n\n"
+                    "The cell nucleus measurements exhibit patterns characteristic of a benign breast mass "
+                    "(physical dimensions and texture values are within normal non-cancerous ranges)."
+                )
+
+            # Mathematical transparency for viva presentation
+            if decision_score is not None:
+                st.caption(
+                    f"**SVM Decision Score:** `{decision_score:+.4f}` "
+                    f"*(Negative score < 0 indicates Benign region; Positive score > 0 indicates Malignant region)*"
+                )
 
             st.info(
-                f"Prediction produced by **{model_name}** using standardized features from `data/data.csv`."
+                f"Prediction computed by **{model_name}** using `StandardScaler` feature normalization fitted on `data/data.csv`."
             )
 
             st.warning(
