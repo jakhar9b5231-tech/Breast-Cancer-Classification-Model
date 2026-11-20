@@ -216,16 +216,21 @@ AWARENESS_PALETTE = {"B": "#7e57c2", "M": "#d81b60"}
 # DATA & MODEL LOADERS
 # ------------------------------------------------------------------------------
 @st.cache_data
-def load_dataset():
-    """Loads the Wisconsin breast cancer dataset from data/data.csv."""
-    path = os.path.join("data", "data.csv")
-    if not os.path.exists(path):
-        path = os.path.join("..", "data", "data.csv")
-    if not os.path.exists(path):
-        st.error(f"Dataset file '{path}' not found.")
-        return None
-    return pd.read_csv(path)
+from pathlib import Path
 
+def load_dataset():
+    data_path = Path(__file__).resolve().parent / "data" / "data.csv"
+
+    if not data_path.exists():
+        st.error(f"Dataset not found at: {data_path}")
+        return None
+
+    try:
+        df = pd.read_csv(data_path)
+        return df
+    except Exception as e:
+        st.error(f"Error reading dataset: {e}")
+        return None
 
 @st.cache_resource
 def load_trained_model():
